@@ -24,31 +24,51 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
+
+
         const productsCollection = client.db('newScicTask').collection('products');
 
-        // API to get products with pagination
-        app.get('/products', async (req, res) => {
-            const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 10;
-            const skip = (page - 1) * limit;
-
-            const products = await productsCollection.find().skip(skip).limit(limit).toArray();
-            const totalProducts = await productsCollection.countDocuments();
-            const totalPages = Math.ceil(totalProducts / limit);
-
-            res.send({
-                products,
-                totalProducts,
-                totalPages,
-                currentPage: page,
-            });
-        });
 
         // API to add products
         app.post('/products', async (req, res) => {
             const product = req.body;
             const result = await productsCollection.insertOne(product);
             res.send(result);
+        });
+
+
+        // API to get products with pagination
+        app.get('/products', async (req, res) => {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 9;
+            const skip = (page - 1) * limit;
+        
+            const { search, category, brand, priceRange, sort } = req.query;
+        
+            let query = {};
+            if (search) query.name = { $regex: search, $options: 'i' };
+            if (category) query.category = category;
+            if (brand) query.brand = brand;
+            if (priceRange) {
+                const [min, max] = priceRange.split('-').map(Number);
+                query.price = { $gte: min, $lte: max };
+            }
+        
+            let sortOption = {};
+            if (sort === 'price-asc') sortOption = { price: 1 };
+            if (sort === 'price-desc') sortOption = { price: -1 };
+            if (sort === 'date-newest') sortOption = { createdAt: -1 };
+        
+            const products = await productsCollection.find(query).sort(sortOption).skip(skip).limit(limit).toArray();
+            const totalProducts = await productsCollection.countDocuments(query);
+            const totalPages = Math.ceil(totalProducts / limit);
+        
+            res.send({
+                products,
+                totalProducts,
+                totalPages,
+                currentPage: page,
+            });
         });
 
         await client.db("admin").command({ ping: 1 });
